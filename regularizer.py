@@ -61,17 +61,17 @@ def contours_test(img_filename):
 	number_windows = 0
 	boundRect = [None] * len(contours)
 	top_list = []
-	bot_list = []
+	height_list = []
 	left_list = []
-	right_list = []
+	width_list = []
 	for i in range(len(contours)):
 		boundRect[i] = cv.boundingRect(contours[i])
 		if hierarchy[0][i][3] != 0:
 			continue
 		left_list.append(boundRect[i][0])
 		top_list.append(boundRect[i][1])
-		right_list.append(boundRect[i][0] + boundRect[i][2] - 1)
-		bot_list.append(boundRect[i][1] + boundRect[i][3] - 1)
+		width_list.append(boundRect[i][2])
+		height_list.append(boundRect[i][3])
 		color = (rng.randint(0, 256), rng.randint(0, 256), rng.randint(0, 256))
 		#cv.drawContours(drawing, contours, i, color, 2, cv.LINE_8, hierarchy, 0)
 		#cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), (int(boundRect[i][0] + boundRect[i][2]), int(boundRect[i][1] + boundRect[i][3])), color, 2)
@@ -80,7 +80,7 @@ def contours_test(img_filename):
 	# Show in a window
 	#cv.imshow('Contours', drawing)
 	#cv.waitKey()
-	return src_gray.shape[0], src_gray.shape[1], left_list, top_list, right_list, bot_list
+	return src_gray.shape[0], src_gray.shape[1], left_list, top_list, width_list, height_list
 
 
 def align_test(array_list, bDebug):
@@ -105,17 +105,17 @@ def main(input_folder, output_folder):
 	for j in range(len(input_images)):
 		input_filename = input_folder + '/' + input_images[j]
 		output_filename = output_folder + '/' + input_images[j]
-		width, height, left_list, top_list, right_list, bot_list = contours_test(input_filename)
+		width, height, left_list, top_list, width_list, height_list = contours_test(input_filename)
 		debug = True
 		left_out = align_test(left_list, debug)
 		top_out = align_test(top_list, debug)
-		right_out = align_test(right_list, debug)
-		bot_out = align_test(bot_list, debug)
+		width_out = align_test(width_list, debug)
+		height_out = align_test(height_list, debug)
 		drawing = np.zeros((width, height, 3), dtype=np.uint8)
 		drawing = drawing + 255
 		window_color = (0, 0, 0)
 		for i in range(len(left_out)):
-			cv.rectangle(drawing, (left_out[i], top_out[i]), (right_out[i], bot_out[i]), window_color, -1)
+			cv.rectangle(drawing, (left_out[i], top_out[i]), (left_out[i] + width_out[i] - 1, top_out[i] + height_out[i] - 1), window_color, -1)
 		# Show in a window
 		cv.imwrite(output_filename, drawing)
 
