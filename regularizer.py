@@ -45,7 +45,7 @@ def kde_test(array_list):
 	e = kde.score_samples(s.reshape(-1, 1))
 	mi, ma = argrelextrema(e, np.less)[0], argrelextrema(e, np.greater)[0]
 	#print("Minima:", s[mi])
-	#print("Maxima:", s[ma])
+	print("Maxima:", s[ma])
 	#plt.plot(s, e)
 	#plt.show()
 	return s[mi], s[ma]
@@ -61,8 +61,8 @@ def contours_test(img_filename):
 	number_windows = 0
 	boundRect = [None] * len(contours)
 	top_list = []
-	height_list = []
 	left_list = []
+	height_list = []
 	width_list = []
 	for i in range(len(contours)):
 		boundRect[i] = cv.boundingRect(contours[i])
@@ -98,6 +98,31 @@ def align_test(array_list, bDebug):
 	if bDebug:
 		print("Array out:", array_out)
 	return array_out
+
+
+def spacing(array_list, dim_list):
+	#sort_index = np.argsort(array_list)
+	#sorted_array_list = array_list[sort_index]
+	#sorted_dim_list = dim_list[sort_index]
+	min_val = np.min(array_list)
+	max_val = np.max(array_list + dim_list)
+	# compute flag_list
+	flag_list = []
+	for i in range(min_val, max_val + 1):
+		flag = 0
+		for j in range(len(array_list)):
+			if array_list[j] <= i <= array_list[j] + dim_list[j]:
+				flag = 1
+				break
+		flag_list.append(flag)
+	# find boundaries
+	boundary_list = []
+	for i in range(len(flag_list) - 1):
+		if flag_list[i] == 1 and flag_list[i + 1] == 0:
+			boundary_list.append(i)
+		if flag_list[i] == 0 and flag_list[i + 1] == 1:
+			boundary_list.append(i + 1)
+	return boundary_list
 
 
 def main(input_folder, output_folder):
