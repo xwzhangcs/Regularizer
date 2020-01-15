@@ -127,14 +127,14 @@ def find_boundaries(array_list, dim_list, bDebug):
 		if flag_list[i] == 0 and flag_list[i + 1] == 1:
 			boundary_list.append(i + 1 + min_val)
 	if bDebug:
+		print(flag_list)
 		print(boundary_list)
 	return boundary_list
 
 
-def spacing_test(left_list, top_list, width_list, height_list, bDebug):
+def horz_spacing_test(left_list, top_list, width_list, height_list, bDebug):
 	# simply average the spacing row by row or col by col
 	top_align = list(set(top_list))
-	left_align = list(set(left_list))
 	if bDebug:
 		print(top_align)
 	new_left_list = []
@@ -146,9 +146,13 @@ def spacing_test(left_list, top_list, width_list, height_list, bDebug):
 		wind_index = np.where(top_list == top_align[i])
 		left_row = left_list[wind_index]
 		width_row = width_list[wind_index]
+		top_col = top_list[wind_index]
+		height_col = height_list[wind_index]
 		sort_index = np.argsort(left_row)
 		sorted_left_row = left_row[sort_index]
 		sorted_width_row = width_row[sort_index]
+		sorted_top_col = top_col[sort_index]
+		sorted_height_col = height_col[sort_index]
 		boundaries = find_boundaries(sorted_left_row, sorted_width_row, bDebug)
 		boundaries = np.array(boundaries)
 		average_spacing = int(np.sum(boundaries[1::2] - boundaries[::2]) / len(boundaries[::2]))
@@ -164,15 +168,33 @@ def spacing_test(left_list, top_list, width_list, height_list, bDebug):
 		for j in range(len(left_row)):
 			new_left_list.append(cur_left)
 			new_width_list.append(sorted_width_row[j])
+			new_top_list.append(sorted_top_col[j])
+			new_height_list.append(sorted_height_col[j])
 			cur_left = cur_left + sorted_width_row[j] + average_spacing
+	return new_left_list, new_width_list, new_top_list, new_height_list
+
+
+def vert_spacing_test(left_list, top_list, width_list, height_list, bDebug):
+	# simply average the spacing row by row or col by col
+	left_align = list(set(left_list))
+	if bDebug:
+		print(left_list)
+	new_left_list = []
+	new_top_list = []
+	new_width_list = []
+	new_height_list = []
 	# vertical spacing
 	for i in range(len(left_align)):
 		wind_index = np.where(left_list == left_align[i])
 		top_col = top_list[wind_index]
 		height_col = height_list[wind_index]
+		left_row = left_list[wind_index]
+		width_row = width_list[wind_index]
 		sort_index = np.argsort(top_col)
 		sorted_top_col = top_col[sort_index]
 		sorted_height_col = height_col[sort_index]
+		sorted_left_row = left_row[sort_index]
+		sorted_width_row = width_row[sort_index]
 		boundaries = find_boundaries(sorted_top_col, sorted_height_col, bDebug)
 		boundaries = np.array(boundaries)
 		average_spacing = int(np.sum(boundaries[1::2] - boundaries[::2]) / len(boundaries[::2]))
@@ -188,6 +210,8 @@ def spacing_test(left_list, top_list, width_list, height_list, bDebug):
 		for j in range(len(top_col)):
 			new_top_list.append(cur_top)
 			new_height_list.append(sorted_height_col[j])
+			new_left_list.append(sorted_left_row[j])
+			new_width_list.append(sorted_width_row[j])
 			cur_top = cur_top + sorted_height_col[j] + average_spacing
 	if bDebug:
 		print(new_left_list)
@@ -204,22 +228,44 @@ def main(input_folder, output_folder):
 		output_filename = output_folder + '/' + input_images[j]
 		print(input_filename)
 		width, height, left_list, top_list, width_list, height_list = contours_test(input_filename)
-		debug = True
+		debug = False
 		left_out = align_test(left_list, debug)
 		top_out = align_test(top_list, debug)
 		width_out = align_test(width_list, debug)
 		height_out = align_test(height_list, debug)
-
-		new_left_out, new_width_out, new_top_out, new_height_out = spacing_test(left_out, top_out, width_out, height_out, debug)
+		left_out = left_out + 1
+		top_out = top_out + 1
+		width_out = width_out - 2
+		height_out = height_out - 2
+		horz_left_out, horz_width_out, horz_top_out, horz_height_out = horz_spacing_test(left_out, top_out, width_out, height_out, debug)
+		horz_left_out = np.array(horz_left_out)
+		horz_width_out = np.array(horz_width_out)
+		horz_top_out = np.array(horz_top_out)
+		horz_height_out = np.array(horz_height_out)
+		new_left_out, new_width_out, new_top_out, new_height_out = vert_spacing_test(horz_left_out, horz_top_out, horz_width_out,
+																				horz_height_out, debug)
 		drawing = np.zeros((width, height, 3), dtype=np.uint8)
 		drawing = drawing + 255
 		window_color = (0, 0, 0)
 		for i in range(len(left_out)):
 			#cv.rectangle(drawing, (left_out[i], top_out[i]), (left_out[i] + width_out[i], top_out[i] + height_out[i]), window_color, -1)
-			cv.rectangle(drawing, (new_left_out[i], new_top_out[i]), (new_left_out[i] + new_width_out[i] - 1, new_top_out[i] + new_height_out[i] - 1),
+			cv.rectangle(drawing, (new_left_out[i], new_top_out[i]), (new_left_out[i] + new_width_out[i], new_top_out[i] + new_height_out[i]),
 						 window_color, -1)
 		# Show in a window
 		cv.imwrite(output_filename, drawing)
+
+
+def add_border(input_folder, output_folder):
+	input_images = sorted(os.listdir(input_folder))
+	for j in range(len(input_images)):
+		input_filename = input_folder + '/' + input_images[j]
+		output_filename = output_folder + '/' + input_images[j]
+		print(input_filename)
+		src_gray = cv.imread(input_filename, cv.IMREAD_UNCHANGED)
+		border = 3
+		value = (255, 255, 255)
+		image = cv.copyMakeBorder(src_gray, border, border, border, border, cv.BORDER_CONSTANT, None, value)
+		cv.imwrite(output_filename, image)
 
 
 if __name__ == "__main__":
@@ -228,5 +274,6 @@ if __name__ == "__main__":
 	parser.add_argument("output_folder", help="path to output images folder (e.g., input_data)")
 	args = parser.parse_args()
 	main(args.input_folder, args.output_folder)
+	#add_border(args.input_folder, args.output_folder)
 	#contours_test("facade_00202.png")
 	#kde_test([20, 26, 20, 20, 26, 21, 20, 26, 21, 20, 27, 21])
