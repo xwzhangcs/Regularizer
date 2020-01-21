@@ -53,6 +53,9 @@ def kde_test(array_list):
 
 def contours_test(img_filename):
 	src_gray = cv.imread(img_filename, cv.IMREAD_UNCHANGED)
+	#print(src_gray.shape)
+	#if src_gray.shape[2] == 4:
+		#src_gray = cv.cvtColor(src_gray, cv.COLOR_BGRA2GRAY)
 	rng.seed(12345)
 	# Find contours
 	_, contours, hierarchy = cv.findContours(src_gray, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
@@ -235,8 +238,8 @@ def main(input_folder, output_folder):
 		height_out = align_test(height_list, debug)
 		left_out = left_out + 1
 		top_out = top_out + 1
-		width_out = width_out - 2
-		height_out = height_out - 2
+		width_out = width_out - 3
+		height_out = height_out - 3
 		horz_left_out, horz_width_out, horz_top_out, horz_height_out = horz_spacing_test(left_out, top_out, width_out, height_out, debug)
 		horz_left_out = np.array(horz_left_out)
 		horz_width_out = np.array(horz_width_out)
