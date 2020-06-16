@@ -21,6 +21,13 @@ from numpy import array, linspace
 from sklearn.neighbors import KernelDensity
 import matplotlib.pyplot as plt
 from scipy.signal import argrelextrema
+from itertools import groupby
+import statistics
+from sklearn.cluster import MeanShift
+
+w_a = 0.01
+w_ss = 0.01
+w_sp = 0.01
 
 def regularize_test():
 	input = np.array([[0, 0, 0, 0, 0, 0, 0], [0, 1, 1, 0, 1, 1, 0], [0, 1, 1, 0, 1, 1, 0],[0, 0, 0, 0, 0, 0, 0], [0, 1, 1, 0, 1, 1, 0], [0, 1, 1, 0, 1, 1, 0]])
@@ -35,7 +42,7 @@ def regularize_test():
 	print(r_2 * c_2)
 
 
-def kde_test(array_list):
+def kde_1d(array_list):
 	a = array(array_list).reshape(-1, 1)
 	kde = KernelDensity(kernel='gaussian', bandwidth=2).fit(a)
 	left_side = 0
@@ -51,6 +58,28 @@ def kde_test(array_list):
 	return s[mi], s[ma]
 
 
+def mean_shift(array_list_w, array_list_h, bDebug):
+	x = array(array_list_w)
+	y = array(array_list_h)
+	data = np.vstack([x, y]).T
+	# define the model
+	model = MeanShift(bandwidth=4)
+	# fit model and predict clusters
+	yhat = model.fit_predict(data)
+	# retrieve unique clusters
+	clusters = np.unique(yhat)
+	# create scatter plot for samples from each cluster
+	groups = []
+	for cluster in clusters:
+		# get row indexes for samples with this cluster
+		row_ix = np.where(yhat == cluster)
+		# create scatter of these samples
+		groups.append(data[row_ix])
+	if bDebug:
+		print("Groups:", groups)
+	return groups
+
+
 def contours_test(img_filename):
 	src_gray = cv.imread(img_filename, cv.IMREAD_UNCHANGED)
 	#print(src_gray.shape)
@@ -58,49 +87,192 @@ def contours_test(img_filename):
 		#src_gray = cv.cvtColor(src_gray, cv.COLOR_BGRA2GRAY)
 	rng.seed(12345)
 	# Find contours
-	_, contours, hierarchy = cv.findContours(src_gray, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+	_, thresh = cv.threshold(src_gray, 127, 255, 0)
+	_, contours, hierarchy = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+	#_, contours, hierarchy = cv.findContours(src_gray, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+	#print(len(contours))
 	# Draw contours
-	drawing = np.zeros((src_gray.shape[0], src_gray.shape[1], 3), dtype=np.uint8)
+	#drawing = np.zeros((src_gray.shape[0], src_gray.shape[1], 3), dtype=np.uint8)
 	number_windows = 0
 	boundRect = [None] * len(contours)
 	top_list = []
+	bot_list = []
 	left_list = []
+	right_list = []
 	height_list = []
 	width_list = []
 	for i in range(len(contours)):
 		boundRect[i] = cv.boundingRect(contours[i])
-		if hierarchy[0][i][3] != 0:
-			continue
 		left_list.append(boundRect[i][0])
 		top_list.append(boundRect[i][1])
+		right_list.append(boundRect[i][0] + boundRect[i][2] - 1)
+		bot_list.append(boundRect[i][1] + boundRect[i][3] - 1)
 		width_list.append(boundRect[i][2])
 		height_list.append(boundRect[i][3])
-		color = (rng.randint(0, 256), rng.randint(0, 256), rng.randint(0, 256))
+		#color = (rng.randint(0, 256), rng.randint(0, 256), rng.randint(0, 256))
 		#cv.drawContours(drawing, contours, i, color, 2, cv.LINE_8, hierarchy, 0)
-		#cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), (int(boundRect[i][0] + boundRect[i][2]), int(boundRect[i][1] + boundRect[i][3])), color, 2)
+		#cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), (int(boundRect[i][0] + boundRect[i][2]), int(boundRect[i][1] + boundRect[i][3])), color, 1)
 		number_windows = number_windows + 1
 	#print(number_windows)
 	# Show in a window
 	#cv.imshow('Contours', drawing)
 	#cv.waitKey()
-	return src_gray.shape[0], src_gray.shape[1], left_list, top_list, width_list, height_list
+	return src_gray.shape[0], src_gray.shape[1], left_list, right_list, top_list, bot_list, width_list, height_list
 
 
-def align_test(array_list, bDebug):
-	_, array_ma = kde_test(array_list)
+def split2groups(array_list, bDebug):
+	_, array_ma = kde_1d(array_list)
 	array_ma = np.rint(array_ma).astype(int)
 	if bDebug:
 		print("Array List:", array_list)
 		print("Array Maxima:", array_ma)
 	dis_array1 = np.tile(array_ma, (len(array_list), 1))
 	dis_array2 = np.transpose(np.tile(array_list, (len(array_ma), 1)))
-	#print(dis_array1)
-	#print(dis_array2)
+	# print(dis_array1)
+	# print(dis_array2)
+	pos = np.argmin(np.abs(dis_array1 - dis_array2), axis=1).reshape(-1, 1)
+	# array_out = array_ma[pos].reshape(1, -1).flatten()
+	list_one = pos.reshape(1, -1).flatten()
+	list_two = array_list
+	# print('list_one is ', list_one)
+	# print('list_two is ', list_two)
+	data = zip(list_one, list_two)
+	groups = []
+	for k, g in groupby(data, lambda x: x[0]):
+		values = [n for m, n in list(g)]
+		groups.append(values)  # Store group iterator as a list
+	if bDebug:
+		print("Groups:", groups)
+	return groups
+
+
+def alignment_error(array_list, bDebug):
+	groups = split2groups(array_list, bDebug)
+
+	# compute score
+	std_groups = 0
+	for i in range(len(groups)):
+		std_groups = std_groups + np.std(groups[i])
+		if bDebug:
+			print(np.std(groups[i]))
+	# encourage fewer and larger groups
+	error =  std_groups + w_a * len(groups)
+	if bDebug:
+		print("Std_groups:", std_groups)
+		print("Align error:", error)
+	return error
+
+
+def same_size_error(array_list_w, array_list_h, bDebug):
+	groups = mean_shift(array_list_w, array_list_h, bDebug)
+	# compute error
+	std_groups = 0
+	for i in range(len(groups)):
+		mean_p = np.mean(groups[i], axis=0)
+		distance = 0
+		for j in range(len(groups[i])):
+			distance = distance + np.square(np.linalg.norm(groups[i][j]-mean_p))
+		distance = np.sqrt(distance) / (len(groups[i]) - 1)
+		std_groups = std_groups + distance
+		if bDebug:
+			print(distance)
+	# encourage fewer and larger groups
+	error = std_groups + w_ss * len(groups)
+	if bDebug:
+		print("Std_groups:", std_groups)
+		print("Same Size error:", error)
+	return error
+
+
+def split(array_list, bDebug):
+	_, array_ma = kde_1d(array_list)
+	array_ma = np.rint(array_ma).astype(int)
+	if bDebug:
+		print("Array List:", array_list)
+		print("Array Maxima:", array_ma)
+	dis_array1 = np.tile(array_ma, (len(array_list), 1))
+	dis_array2 = np.transpose(np.tile(array_list, (len(array_ma), 1)))
+	# print(dis_array1)
+	# print(dis_array2)
 	pos = np.argmin(np.abs(dis_array1 - dis_array2), axis=1).reshape(-1, 1)
 	array_out = array_ma[pos].reshape(1, -1).flatten()
-	if bDebug:
-		print("Array out:", array_out)
 	return array_out
+
+
+def hor_spacing(left_list, right_list, top_list, bot_list, debug):
+	top_list = split(top_list, debug)
+	top_align = np.unique(top_list)
+	#print(top_align)
+	#print('left_list ', left_list)
+	#print('right_list ', right_list)
+	# horizontal spacing
+	left_array = np.array(left_list)
+	right_array = np.array(right_list)
+	spacings = []
+	for i in range(len(top_align)):
+		wind_index = np.where(top_list == top_align[i])
+		#print(wind_index)
+		left_row = left_array[wind_index]
+		right_row = right_array[wind_index]
+		sort_index = np.argsort(left_row)
+		sorted_left_row = left_row[sort_index]
+		sorted_right_row = right_row[sort_index]
+		#print(sorted_left_row)
+		#print(sorted_right_row)
+		#print(sorted_left_row[1::1])
+		#print(sorted_right_row[:len(sorted_right_row) - 1])
+		spacings.extend(sorted_left_row[1::1] - sorted_right_row[:len(sorted_right_row) - 1])
+	if debug:
+		print(spacings)
+	return spacings
+
+
+def ver_spacing(left_list, right_list, top_list, bot_list, debug):
+	left_list = split(left_list, debug)
+	left_align = np.unique(left_list)
+	# print(left_align)
+	# print('top_list ', top_list)
+	# print('bot_list ', bot_list)
+	# vertical spacing
+	top_array = np.array(top_list)
+	bot_array = np.array(bot_list)
+	spacings = []
+	for i in range(len(left_align)):
+		wind_index = np.where(left_list == left_align[i])
+		# print(wind_index)
+		top_row = top_array[wind_index]
+		bot_row = bot_array[wind_index]
+		sort_index = np.argsort(top_row)
+		sorted_top_row = top_row[sort_index]
+		sorted_bot_row = bot_row[sort_index]
+		# print(sorted_top_row)
+		# print(sorted_bot_row)
+		# print(sorted_top_row[1::1])
+		# print(sorted_bot_row[:len(sorted_bot_row) - 1])
+		spacings.extend(sorted_top_row[1::1] - sorted_bot_row[:len(sorted_right_row) - 1])
+	if debug:
+		print(spacings)
+	return spacings
+
+
+def same_spacing_error(left_list, right_list, top_list, bot_list, debug):
+	hor_spacings = hor_spacing(left_list, right_list, top_list, bot_list, debug)
+	sorted_hor_spacings = sorted(hor_spacings)
+	hor_groups = split2groups(sorted_hor_spacings, debug)
+
+	# compute score
+	std_groups = 0.0
+	for i in range(len(hor_groups)):
+		std_groups = std_groups + np.std(hor_groups[i])
+		print(hor_groups[i])
+		if debug:
+			print(np.std(np.array(hor_groups[i])))
+	# encourage fewer and larger groups
+	error = std_groups + w_sp * len(hor_groups)
+	if debug:
+		print("Std_groups:", std_groups)
+		print("Align error:", error)
+	return error
 
 
 def find_boundaries(array_list, dim_list, bDebug):
@@ -230,12 +402,29 @@ def main(input_folder, output_folder):
 		input_filename = input_folder + '/' + input_images[j]
 		output_filename = output_folder + '/' + input_images[j]
 		print(input_filename)
-		width, height, left_list, top_list, width_list, height_list = contours_test(input_filename)
-		debug = False
-		left_out = align_test(left_list, debug)
-		top_out = align_test(top_list, debug)
-		width_out = align_test(width_list, debug)
-		height_out = align_test(height_list, debug)
+		width, height, left_list, right_list, top_list, bot_list, width_list, height_list = contours_test(input_filename)
+
+		# sort list
+		left_list_sorted = sorted(left_list)
+		right_list_sorted = sorted(right_list)
+		top_list_sorted = sorted(top_list)
+		bot_list_sorted = sorted(bot_list)
+
+		# Alignment Regularization
+		#debug = False
+		#left_align_error = alignment_error(left_list_sorted, debug)
+		#right_align_error = alignment_error(right_list_sorted, debug)
+		#top_align_error = alignment_error(top_list_sorted, debug)
+		#bot_align_error = alignment_error(bot_list_sorted, debug)
+
+		# Same Size Regularization
+		#debug = True
+		#same_size_error(width_list, height_list, debug)
+
+		# Same Spacing Regularization
+		debug = True
+		same_spacing_error(left_list, right_list, top_list, bot_list, debug)
+		'''
 		left_out = left_out + 1
 		top_out = top_out + 1
 		width_out = width_out - 3
@@ -256,6 +445,7 @@ def main(input_folder, output_folder):
 						 window_color, -1)
 		# Show in a window
 		cv.imwrite(output_filename, drawing)
+		'''
 
 
 def add_border(input_folder, output_folder):
