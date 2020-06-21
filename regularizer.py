@@ -26,7 +26,7 @@ import statistics
 from sklearn.cluster import MeanShift
 
 w_a = 0.01
-w_ss = 0.01
+w_ss = 0.03
 w_sp = 0.01
 
 def regularize_test():
@@ -63,7 +63,7 @@ def mean_shift(array_list_w, array_list_h, bDebug):
 	y = array(array_list_h)
 	data = np.vstack([x, y]).T
 	# define the model
-	model = MeanShift(bandwidth=4)
+	model = MeanShift(bandwidth=5)
 	# fit model and predict clusters
 	yhat = model.fit_predict(data)
 	# retrieve unique clusters
@@ -146,15 +146,20 @@ def split2groups(array_list, bDebug):
 	return groups
 
 
-def alignment_error(array_list, bDebug):
+def alignment_error(array_list, width_list_sorted, bDebug):
 	groups = split2groups(array_list, bDebug)
-
+	if bDebug:
+		print("width list is ", width_list_sorted)
 	# compute score
 	std_groups = 0
+	current_index = 0
 	for i in range(len(groups)):
-		std_groups = std_groups + np.std(groups[i])
+		min_width = np.min(width_list_sorted[current_index: current_index + len(groups[i])])
+		std_groups = std_groups + np.std(groups[i]) / min_width
 		if bDebug:
+			print(width_list_sorted[current_index: current_index + len(groups[i])])
 			print(np.std(groups[i]))
+		current_index = current_index + len(groups[i])
 	# encourage fewer and larger groups
 	error =  std_groups + w_a * len(groups)
 	if bDebug:
@@ -170,12 +175,16 @@ def same_size_error(array_list_w, array_list_h, bDebug):
 	for i in range(len(groups)):
 		mean_p = np.mean(groups[i], axis=0)
 		distance = 0
+		# min height or width
+		min_v = 1000
 		for j in range(len(groups[i])):
 			distance = distance + np.square(np.linalg.norm(groups[i][j]-mean_p))
-		distance = np.sqrt(distance) / (len(groups[i]) - 1)
-		std_groups = std_groups + distance
+			min_v = min([groups[i][j][0], groups[i][j][1], min_v])
+		distance = np.sqrt(distance) / (len(groups[i]))
+		std_groups = std_groups + distance / min_v
 		if bDebug:
 			print(distance)
+			print(min_v)
 	# encourage fewer and larger groups
 	error = std_groups + w_ss * len(groups)
 	if bDebug:
@@ -249,13 +258,16 @@ def ver_spacing(left_list, right_list, top_list, bot_list, debug):
 		# print(sorted_bot_row)
 		# print(sorted_top_row[1::1])
 		# print(sorted_bot_row[:len(sorted_bot_row) - 1])
-		spacings.extend(sorted_top_row[1::1] - sorted_bot_row[:len(sorted_right_row) - 1])
+		spacings.extend(sorted_top_row[1::1] - sorted_bot_row[:len(sorted_bot_row) - 1])
 	if debug:
 		print(spacings)
 	return spacings
 
 
 def same_spacing_error(left_list, right_list, top_list, bot_list, debug):
+	ver_error = 0
+	hor_error = 0
+
 	hor_spacings = hor_spacing(left_list, right_list, top_list, bot_list, debug)
 	sorted_hor_spacings = sorted(hor_spacings)
 	hor_groups = split2groups(sorted_hor_spacings, debug)
@@ -263,16 +275,36 @@ def same_spacing_error(left_list, right_list, top_list, bot_list, debug):
 	# compute score
 	std_groups = 0.0
 	for i in range(len(hor_groups)):
-		std_groups = std_groups + np.std(hor_groups[i])
+		min_v = np.min(hor_groups[i])
+		std_groups = std_groups + np.std(hor_groups[i]) / min_v
 		print(hor_groups[i])
 		if debug:
 			print(np.std(np.array(hor_groups[i])))
 	# encourage fewer and larger groups
-	error = std_groups + w_sp * len(hor_groups)
+	hor_error = std_groups + w_sp * len(hor_groups)
 	if debug:
-		print("Std_groups:", std_groups)
-		print("Align error:", error)
-	return error
+		print("Hor Std_groups:", std_groups)
+		print("Hor Align error:", hor_error)
+	
+
+	ver_spacings = ver_spacing(left_list, right_list, top_list, bot_list, debug)
+	sorted_ver_spacings = sorted(ver_spacings)
+	ver_groups = split2groups(sorted_ver_spacings, debug)
+
+	# compute score
+	std_groups = 0.0
+	for i in range(len(ver_groups)):
+		min_v = np.min(ver_groups[i])
+		std_groups = std_groups + np.std(ver_groups[i]) / min_v
+		print(ver_groups[i])
+		if debug:
+			print(np.std(np.array(ver_groups[i])))
+	# encourage fewer and larger groups
+	ver_error = std_groups + w_sp * len(ver_groups)
+	if debug:
+		print("Ver Std_groups:", std_groups)
+		print("Ver Align error:", ver_error)
+	return hor_error, ver_error
 
 
 def find_boundaries(array_list, dim_list, bDebug):
@@ -405,47 +437,43 @@ def main(input_folder, output_folder):
 		width, height, left_list, right_list, top_list, bot_list, width_list, height_list = contours_test(input_filename)
 
 		# sort list
-		left_list_sorted = sorted(left_list)
-		right_list_sorted = sorted(right_list)
-		top_list_sorted = sorted(top_list)
-		bot_list_sorted = sorted(bot_list)
-
 		# Alignment Regularization
-		#debug = False
-		#left_align_error = alignment_error(left_list_sorted, debug)
-		#right_align_error = alignment_error(right_list_sorted, debug)
-		#top_align_error = alignment_error(top_list_sorted, debug)
-		#bot_align_error = alignment_error(bot_list_sorted, debug)
+
+		'''
+		debug = False
+		sort_index_left = np.argsort(left_list)
+		left_list_sorted = np.array(left_list)[sort_index_left]
+		width_list_sorted = np.array(width_list)[sort_index_left]
+		left_align_error = alignment_error(left_list_sorted, width_list_sorted, debug)
+
+		sort_index_right = np.argsort(right_list)
+		right_list_sorted = np.array(right_list)[sort_index_right]
+		width_list_sorted = np.array(width_list)[sort_index_right]
+		right_align_error = alignment_error(right_list_sorted, width_list_sorted, debug)
+		
+		sort_index_top = np.argsort(top_list)
+		top_list_sorted = np.array(top_list)[sort_index_top]
+		height_list_sorted = np.array(height_list)[sort_index_top]
+		top_align_error = alignment_error(top_list_sorted, height_list_sorted, debug)
+
+		sort_index_bot = np.argsort(bot_list)
+		bot_list_sorted = np.array(bot_list)[sort_index_bot]
+		height_list_sorted = np.array(height_list)[sort_index_bot]
+		bot_align_error = alignment_error(bot_list_sorted, height_list_sorted, debug)
+
+		print('total align error is ', left_align_error + right_align_error + top_align_error + bot_align_error)
+		'''
 
 		# Same Size Regularization
 		#debug = True
-		#same_size_error(width_list, height_list, debug)
+		#size_error = same_size_error(width_list, height_list, debug)
+		#print('total size error is ',size_error)
+
 
 		# Same Spacing Regularization
-		debug = True
-		same_spacing_error(left_list, right_list, top_list, bot_list, debug)
-		'''
-		left_out = left_out + 1
-		top_out = top_out + 1
-		width_out = width_out - 3
-		height_out = height_out - 3
-		horz_left_out, horz_width_out, horz_top_out, horz_height_out = horz_spacing_test(left_out, top_out, width_out, height_out, debug)
-		horz_left_out = np.array(horz_left_out)
-		horz_width_out = np.array(horz_width_out)
-		horz_top_out = np.array(horz_top_out)
-		horz_height_out = np.array(horz_height_out)
-		new_left_out, new_width_out, new_top_out, new_height_out = vert_spacing_test(horz_left_out, horz_top_out, horz_width_out,
-																				horz_height_out, debug)
-		drawing = np.zeros((width, height, 3), dtype=np.uint8)
-		drawing = drawing + 255
-		window_color = (0, 0, 0)
-		for i in range(len(left_out)):
-			#cv.rectangle(drawing, (left_out[i], top_out[i]), (left_out[i] + width_out[i], top_out[i] + height_out[i]), window_color, -1)
-			cv.rectangle(drawing, (new_left_out[i], new_top_out[i]), (new_left_out[i] + new_width_out[i], new_top_out[i] + new_height_out[i]),
-						 window_color, -1)
-		# Show in a window
-		cv.imwrite(output_filename, drawing)
-		'''
+		debug = False
+		hor_error, ver_error = same_spacing_error(left_list, right_list, top_list, bot_list, debug)
+		print('total spacing error is ', hor_error +  ver_error)
 
 
 def add_border(input_folder, output_folder):
